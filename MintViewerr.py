@@ -14,26 +14,17 @@ from telegram.ext import (
     filters,
 )
 
-# Настройка логирования
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Основные принципы оформления сообщений:
-# • Эмодзи: В сообщениях добавлены соответствующие эмодзи (например, ❗, ✅, 🔔),
-#   что делает общение с ботом более дружественным.
-# • Лаконичность: Сообщения сформулированы кратко и ясно, предоставляя всю необходимую
-#   информацию без избыточных деталей.
-
 DB_PATH = "subscriptions.db"
 
-# Множества для хранения состояний (в памяти)
-paid_subscriptions = set()       # Чаты, оплатившие подписку (загружаются из БД)
-active_notifications = set()     # Чаты, у которых уведомления включены
+paid_subscriptions = set()
+active_notifications = set()
 
 CHANNEL_USERNAME = "@Nftsgiftsnews"
-EXTRA_CHANNEL = "@shapodev"      # Дополнительный обязательный канал
+EXTRA_CHANNEL = "@shapodev"
 
-# Предопределённый список подарков (как видит пользователь)
 GIFT_ORDER = [
     "Neko Helmet", "Candy Cane", "Tama Gadget", "Electric Skull", "Snow Globe",
     "Winter Wreath", "Record Player", "Top Hat", "Sleigh Bell", "Sakura Flower",
@@ -48,13 +39,10 @@ GIFT_ORDER = [
     "Vintage Cigar", "Berry Box", "Eternal Rose", "Perfume Bottle", "Durov's Cap",
     "Jelly Bunny", "Spiced Wine", "Plush Pepe", "Precious Peach", "Signet Ring", "Santa Hat"
 ]
-# ALLOWED_GIFTS – набор допустимых подарков (без пробелов, в нижнем регистре)
 ALLOWED_GIFTS = set(g.replace(" ", "").lower() for g in GIFT_ORDER)
 
-# Глобальный словарь для хранения фильтров уведомлений: chat_id -> set(названий подарков)
 user_gift_filters = {}
 
-# Функция инициализации базы данных и загрузки оплаченных подписок
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
@@ -66,7 +54,6 @@ async def init_db():
                 paid_subscriptions.add(row[0])
     logger.info("Загружены оплаченные подписки: %s", paid_subscriptions)
 
-# Функция для добавления нового пользователя в БД
 async def add_subscription(chat_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
@@ -77,7 +64,6 @@ async def add_subscription(chat_id: int):
     paid_subscriptions.add(chat_id)
     logger.info("Добавлена подписка для чата %s", chat_id)
 
-# Команда /start – включает уведомления, если подписка оплачена и пользователь подписан на оба канала
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     try:
@@ -108,7 +94,6 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Для активации подписки используйте команду /buy."
         )
 
-# Команда /stop – отключает уведомления (подписка остаётся активной)
 async def stop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in active_notifications:
@@ -120,7 +105,6 @@ async def stop_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Уведомления уже отключены.")
 
-# Команда /buy – отправляет инвойс на оплату подписки (15 звезд)
 async def buy_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in paid_subscriptions:
@@ -136,8 +120,8 @@ async def buy_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Стоимость: 15 звезд."
     )
     payload = "subscription_payload"
-    provider_token = ""  # Провайдер-токен не обязателен
-    currency = "XTR"     # Валюта – Telegram Stars (XTR)
+    provider_token = ""
+    currency = "XTR"
     prices = [LabeledPrice("Подписка (15 звезд)", 15)]
     start_parameter = "subscription"
 
@@ -152,7 +136,6 @@ async def buy_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         start_parameter=start_parameter,
     )
 
-# Команда /filter – устанавливает фильтр уведомлений по подаркам
 async def filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not context.args:
@@ -168,7 +151,6 @@ async def filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_gift_filters[chat_id] = set(processed_gifts)
     await update.message.reply_text("Фильтр уведомлений установлен:\n" + ", ".join(gift_list))
 
-# Команда /clear – очищает фильтр уведомлений (пользователь будет получать уведомления по всем подаркам)
 async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if chat_id in user_gift_filters:
@@ -180,12 +162,10 @@ async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Фильтр уведомлений не был установлен.")
 
-# Команда /gifts – выводит список всех подарков
 async def gifts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     gift_list_text = "\n".join(GIFT_ORDER)
     await update.message.reply_text("Список подарков:\n" + gift_list_text)
 
-# Обработка pre_checkout_query (обязательный шаг)
 async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
     if query.invoice_payload != 'subscription_payload':
@@ -193,7 +173,6 @@ async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await query.answer(ok=True)
 
-# После успешного платежа – подписка активируется (пользователь добавляется в БД и в активные уведомления)
 async def successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await add_subscription(chat_id)
@@ -203,7 +182,6 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
         "Уведомления активированы. Благодарим за покупку!"
     )
 
-# Функция создания Socket.IO клиента с настроенной HTTP-сессией
 def create_socketio_client():
     connector = aiohttp.TCPConnector(ssl=False)
     session = aiohttp.ClientSession(connector=connector)
@@ -215,13 +193,12 @@ def create_socketio_client():
     )
     return sio
 
-# Основной блок – инициализация бота, базы и Socket.IO клиента
 async def main():
     global application
 
     await init_db()
 
-    bot_token = "7330638458:AAGBquJSpQdkEugKtQAPk7hkzboS9NTOMtQ"  # Замените на ваш токен
+    bot_token = "your_token"
     application = ApplicationBuilder().token(bot_token).build()
 
     application.add_handler(CommandHandler("start", start_cmd))
